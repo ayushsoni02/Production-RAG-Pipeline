@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ Production-Grade RAG Pipeline
+#  Production-Grade RAG Pipeline
 
 ### Hybrid Retrieval · Cross-Encoder Reranking · RAGAS Evaluation
 
@@ -19,7 +19,7 @@
 
 ---
 
-## 🎯 What Problem Does This Solve?
+##  What Problem Does This Solve?
 
 **Naive RAG is broken for production use.** Simple vector-similarity search fails on complex documents because:
 
@@ -37,7 +37,7 @@ This pipeline solves all three by combining **hybrid retrieval** (dense + sparse
 
 ---
 
-## 📐 Architecture
+##  Architecture
 
 The system is organized into **5 clearly separated layers**, each with a specific responsibility:
 
@@ -202,7 +202,7 @@ With `breakpoint_percentile_threshold=95`, the splitter only breaks when the sem
 
 ---
 
-## 📊 Evaluation & Metrics
+##  Evaluation & Metrics
 
 ### RAGAS Framework
 
@@ -231,7 +231,7 @@ The evaluation harness uses [RAGAS](https://docs.ragas.io/) to score both the **
 
 ---
 
-## 🖥 Interactive UI
+## Interactive UI
 
 The frontend is a 4-panel single-page app with a dark glassmorphic design:
 
@@ -244,7 +244,7 @@ The frontend is a 4-panel single-page app with a dark glassmorphic design:
 
 ---
 
-## 📡 API Reference
+## API Reference
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -336,7 +336,7 @@ All configuration is centralized in [`config.py`](rag_pipeline/config.py) and re
 
 ---
 
-## 🧠 Why This Project?
+## Why This Project?
 
 Most RAG tutorials stop at "embed → retrieve → generate." This is fine for demos, but **production systems demand more:**
 
@@ -352,7 +352,7 @@ This project exists to demonstrate that **production RAG is an engineering disci
 
 ---
 
-## 📜 License
+## License
 
 This project is open-source and available under the [MIT License](LICENSE).
 
@@ -360,8 +360,5 @@ This project is open-source and available under the [MIT License](LICENSE).
 
 <div align="center">
 
-**Built with ❤️ by [Ayush Soni](https://github.com/ayushsoni02)**
-
-*If this project helped you understand production RAG, consider giving it a ⭐*
 
 </div>

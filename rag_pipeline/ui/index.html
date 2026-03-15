@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAG Pipeline — Hybrid Retrieval Engine</title>
+  <meta name="description" content="Production-grade RAG pipeline with hybrid retrieval, cross-encoder reranking, and RAGAS evaluation." />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Variables ──────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary:    #0a0b0f;
+      --bg-secondary:  #12131a;
+      --bg-card:       #181922;
+      --bg-glass:      rgba(24, 25, 34, 0.75);
+      --border:        rgba(255, 255, 255, 0.06);
+      --border-active: rgba(139, 92, 246, 0.4);
+      --text-primary:  #e8e9ed;
+      --text-secondary:#8b8d9a;
+      --text-muted:    #555668;
+      --accent:        #8b5cf6;
+      --accent-dim:    #6d28d9;
+      --accent-glow:   rgba(139, 92, 246, 0.15);
+      --green:         #22c55e;
+      --green-dim:     rgba(34, 197, 94, 0.15);
+      --amber:         #f59e0b;
+      --amber-dim:     rgba(245, 158, 11, 0.15);
+      --red:           #ef4444;
+      --red-dim:       rgba(239, 68, 68, 0.15);
+      --cyan:          #06b6d4;
+      --cyan-dim:      rgba(6, 182, 212, 0.15);
+      --radius:        12px;
+      --radius-sm:     8px;
+      --radius-xs:     6px;
+      --font-sans:     'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono:     'JetBrains Mono', 'Fira Code', monospace;
+      --transition:    all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html { font-size: 14px; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Layout ────────────────────────────────────────────────── */
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .app-header .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 1.15rem;
+      letter-spacing: -0.3px;
+    }
+    .app-header .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent), #a78bfa, #c084fc);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .tab-bar {
+      display: flex;
+      gap: 2px;
+      padding: 8px 28px 0;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      padding: 10px 20px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: var(--transition);
+      letter-spacing: -0.1px;
+    }
+    .tab-btn:hover { color: var(--text-primary); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .main-content {
+      padding: 24px 28px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .panel { display: none; animation: fadeIn 0.3s ease; }
+    .panel.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ── Cards & Glass ─────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+      transition: var(--transition);
+    }
+    .card:hover { border-color: var(--border-active); }
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+    }
+
+    .glass {
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    /* ── Inputs ────────────────────────────────────────────────── */
+    textarea, input[type="text"], select {
+      width: 100%;
+      padding: 12px 14px;
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      outline: none;
+      transition: var(--transition);
+      resize: vertical;
+    }
+    textarea:focus, input[type="text"]:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    textarea { min-height: 100px; }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .form-group { margin-bottom: 14px; }
+
+    /* ── Buttons ───────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--transition);
+      letter-spacing: -0.1px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(139, 92, 246, 0.3);
+    }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .btn-secondary {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+    }
+    .btn-secondary:hover {
+      border-color: var(--border-active);
+      background: var(--bg-secondary);
+    }
+
+    /* ── Sliders ───────────────────────────────────────────────── */
+    .slider-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: 2px solid var(--bg-card);
+      box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+    }
+    .slider-val {
+      min-width: 32px;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* ── Grid helpers ──────────────────────────────────────────── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+    @media (max-width: 900px) {
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    }
+
+    /* ── Metric cards ──────────────────────────────────────────── */
+    .metric-card {
+      padding: 18px;
+      border-radius: var(--radius);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      text-align: center;
+      transition: var(--transition);
+    }
+    .metric-card:hover { border-color: var(--border-active); transform: translateY(-2px); }
+    .metric-value {
+      font-size: 2rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      background: linear-gradient(135deg, var(--accent), #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .metric-label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .metric-delta {
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-top: 6px;
+    }
+    .metric-delta.positive { color: var(--green); }
+    .metric-delta.negative { color: var(--red); }
+
+    /* ── Score bars ─────────────────────────────────────────────── */
+    .score-bar-track {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-primary);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), #c084fc);
+      transition: width 0.6s ease;
+    }
+
+    /* ── Chunk cards ────────────────────────────────────────────── */
+    .chunk-card {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      margin-bottom: 10px;
+      transition: var(--transition);
+    }
+    .chunk-card:hover { border-color: var(--border-active); }
+    .chunk-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .chunk-rank {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--accent);
+      padding: 2px 8px;
+      background: var(--accent-glow);
+      border-radius: 4px;
+    }
+    .chunk-meta {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      display: flex;
+      gap: 12px;
+    }
+    .chunk-text {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-top: 8px;
+      white-space: pre-wrap;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    /* ── Answer box ────────────────────────────────────────────── */
+    .answer-box {
+      padding: 20px;
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.05), rgba(6, 182, 212, 0.03));
+      border: 1px solid var(--border-active);
+      border-radius: var(--radius);
+      line-height: 1.7;
+      font-size: 0.92rem;
+    }
+
+    /* ── Pipeline trace ────────────────────────────────────────── */
+    .trace-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      font-size: 0.8rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .trace-step:last-child { border-bottom: none; }
+    .trace-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+    }
+    .trace-name { flex: 1; color: var(--text-primary); }
+    .trace-ms {
+      font-family: var(--font-mono);
+      color: var(--accent);
+      font-size: 0.75rem;
+    }
+
+    /* ── File upload (drag & drop) ─────────────────────────────── */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px;
+      text-align: center;
+      color: var(--text-secondary);
+      transition: var(--transition);
+      cursor: pointer;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+    }
+    .drop-icon { font-size: 2rem; margin-bottom: 10px; }
+    .drop-text { font-size: 0.85rem; }
+    .drop-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; }
+
+    /* ── Document list ─────────────────────────────────────────── */
+    .doc-row {
+      display: flex;
+      align-items: center;
+      padding: 10px 14px;
+      border-radius: var(--radius-xs);
+      background: var(--bg-primary);
+      margin-bottom: 6px;
+      font-size: 0.82rem;
+    }
+    .doc-name { flex: 1; font-weight: 500; }
+    .doc-badge {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--accent-glow);
+      color: var(--accent);
+    }
+
+    /* ── Comparison table ──────────────────────────────────────── */
+    .comp-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    .comp-table th, .comp-table td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .comp-table th {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .comp-table td { color: var(--text-primary); }
+    .comp-table tbody tr:hover { background: var(--accent-glow); }
+
+    /* ── Settings grid ─────────────────────────────────────────── */
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .setting-label {
+      font-size: 0.85rem;
+      color: var(--text-primary);
+    }
+    .setting-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Toggle switch */
+    .toggle {
+      width: 44px;
+      height: 24px;
+      border-radius: 12px;
+      background: var(--border);
+      cursor: pointer;
+      position: relative;
+      transition: var(--transition);
+      border: none;
+    }
+    .toggle.active { background: var(--accent); }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      transition: var(--transition);
+    }
+    .toggle.active::after { left: 23px; }
+
+    /* ── Log output ────────────────────────────────────────────── */
+    .log-output {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      max-height: 200px;
+      overflow-y: auto;
+      line-height: 1.8;
+    }
+    .log-line-info { color: var(--cyan); }
+    .log-line-success { color: var(--green); }
+    .log-line-warning { color: var(--amber); }
+    .log-line-error { color: var(--red); }
+
+    /* ── Spinner ────────────────────────────────────────────────── */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-overlay {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 30px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+    .loading-overlay.show { display: flex; }
+
+    /* ── Scrollbar ──────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════ HEADER ═══════════ -->
+<header class="app-header">
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <span>RAG Pipeline</span>
+  </div>
+  <div class="header-status">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">Connecting…</span>
+  </div>
+</header>
+
+<!-- ═══════════ TAB BAR ═══════════ -->
+<nav class="tab-bar">
+  <button class="tab-btn active" data-panel="query">⚡ Query Engine</button>
+  <button class="tab-btn" data-panel="ingest">📄 Ingestion</button>
+  <button class="tab-btn" data-panel="eval">📊 Evaluation</button>
+  <button class="tab-btn" data-panel="settings">⚙️ Settings</button>
+</nav>
+
+<main class="main-content">
+
+<!-- ═══════════ PANEL 1: QUERY ═══════════ -->
+<section class="panel active" id="panel-query">
+
+  <div class="grid-2">
+    <!-- LEFT: Controls -->
+    <div>
+      <div class="card">
+        <div class="card-title">Ask a Question</div>
+        <div class="form-group">
+          <textarea id="queryInput" placeholder="e.g.  What are the key compliance requirements for data handling?"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Retrieval Mode</label>
+          <select id="queryMode">
+            <option value="optimized">Hybrid + Rerank (Optimized)</option>
+            <option value="naive">Dense Only (Naive)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Candidates k</label>
+          <div class="slider-group">
+            <input type="range" id="topK" min="5" max="40" value="20" />
+            <span class="slider-val" id="topKVal">20</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Rerank top-n</label>
+          <div class="slider-group">
+            <input type="range" id="rerankN" min="1" max="10" value="5" />
+            <span class="slider-val" id="rerankNVal">5</span>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="queryBtn" onclick="runQuery()">
+          ⚡ Run Query
+        </button>
+      </div>
+
+      <!-- Pipeline Trace -->
+      <div class="card" id="traceCard" style="display:none;">
+        <div class="card-title">Pipeline Trace</div>
+        <div id="pipelineTrace"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Results -->
+    <div>
+      <div class="loading-overlay" id="queryLoading">
+        <div class="spinner"></div>
+        Running pipeline…
+      </div>
+
+      <!-- Answer -->
+      <div class="card" id="answerCard" style="display:none;">
+        <div class="card-title">Answer</div>
+        <div class="answer-box" id="answerBox"></div>
+        <div style="margin-top:10px; font-family:var(--font-mono); font-size:0.7rem; color:var(--text-muted);">
+          Latency: <span id="answerLatency">—</span> ms
+        </div>
+      </div>
+
+      <!-- Retrieved chunks -->
+      <div class="card" id="chunksCard" style="display:none;">
+        <div class="card-title">Retrieved Chunks</div>
+        <div id="chunksList"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ PANEL 2: INGESTION ═══════════ -->
+<section class="panel" id="panel-ingest">
+
+  <div class="grid-2">
+    <div>
+      <!-- Upload -->
+      <div class="card">
+        <div class="card-title">Upload Documents</div>
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-icon">📁</div>
+          <div class="drop-text">Drag & drop files here, or click to browse</div>
+          <div class="drop-hint">PDF, TXT, HTML, Markdown supported</div>
+          <input type="file" id="fileInput" multiple accept=".pdf,.txt,.html,.md" style="display:none;" />
+        </div>
+        <div class="loading-overlay" id="ingestLoading">
+          <div class="spinner"></div>
+          Ingesting documents…
+        </div>
+        <div id="ingestResult" style="margin-top:12px;"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="card">
+        <div class="card-title">Actions</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-secondary" onclick="reindexAll()">🔄 Re-index All</button>
+          <button class="btn btn-secondary" onclick="generateTestset()">🧪 Generate Test Set</button>
+        </div>
+        <div id="actionResult" style="margin-top:12px; font-size:0.82rem; color:var(--text-secondary);"></div>
+      </div>
+    </div>
+
+    <div>
+      <!-- Stats -->
+      <div class="card">
+        <div class="card-title">Collection Stats</div>
+        <div class="grid-3" id="statsGrid">
+          <div class="metric-card">
+            <div class="metric-value" id="statChunks">—</div>
+            <div class="metric-label">Total Chunks</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value" id="statDocs">—</div>
+            <div class="metric-label">Documents</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value" id="statDim">1536</div>
+            <div class="metric-label">Embed Dims</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Document list -->
+      <div class="card">
+        <div class="card-title">Indexed Documents</div>
+        <div id="docList">
+          <div style="font-size:0.82rem; color:var(--text-muted);">No documents indexed yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ PANEL 3: EVALUATION ═══════════ -->
+<section class="panel" id="panel-eval">
+
+  <!-- Metric summary cards -->
+  <div class="grid-3" style="margin-bottom:20px;">
+    <div class="metric-card">
+      <div class="metric-value" id="evalCP">—</div>
+      <div class="metric-label">Context Precision</div>
+      <div class="metric-delta" id="evalCPDelta"></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value" id="evalFaith">—</div>
+      <div class="metric-label">Faithfulness</div>
+      <div class="metric-delta" id="evalFaithDelta"></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value" id="evalAR">—</div>
+      <div class="metric-label">Answer Relevancy</div>
+      <div class="metric-delta" id="evalARDelta"></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div>
+      <!-- Comparison table -->
+      <div class="card">
+        <div class="card-title">Naive vs Optimized</div>
+        <table class="comp-table" id="evalTable">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Naive</th>
+              <th>Optimized</th>
+              <th>Delta</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="4" style="color:var(--text-muted);">Run the evaluation harness to see results.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <!-- Controls & Log -->
+      <div class="card">
+        <div class="card-title">Evaluation Controls</div>
+        <div class="form-group">
+          <label>Samples</label>
+          <div class="slider-group">
+            <input type="range" id="evalSamples" min="5" max="50" value="20" />
+            <span class="slider-val" id="evalSamplesVal">20</span>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="evalBtn" onclick="runEvaluation()">
+          📊 Run Evaluation Harness
+        </button>
+        <div class="loading-overlay" id="evalLoading">
+          <div class="spinner"></div>
+          Running RAGAS evaluation… this may take several minutes.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Evaluation Log</div>
+        <div class="log-output" id="evalLog">
+          <div class="log-line-info">Ready. Click "Run Evaluation Harness" to begin.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ PANEL 4: SETTINGS ═══════════ -->
+<section class="panel" id="panel-settings">
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Pipeline Toggles</div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">BM25 Sparse Retrieval</div>
+          <div class="setting-desc">Enable keyword-based retrieval alongside dense vectors</div>
+        </div>
+        <button class="toggle active" id="toggleBM25" onclick="toggleSwitch(this)"></button>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Cohere Reranker</div>
+          <div class="setting-desc">Cross-encoder reranking for improved precision</div>
+        </div>
+        <button class="toggle active" id="toggleReranker" onclick="toggleSwitch(this)"></button>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Query Expansion</div>
+          <div class="setting-desc">Generate multiple query variants for better recall</div>
+        </div>
+        <button class="toggle" id="toggleExpansion" onclick="toggleSwitch(this)"></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Model Configuration</div>
+
+      <div class="form-group">
+        <label>Reranker Model</label>
+        <select id="settingReranker">
+          <option value="rerank-english-v3.0" selected>Cohere rerank-english-v3.0</option>
+          <option value="rerank-multilingual-v3.0">Cohere rerank-multilingual-v3.0</option>
+          <option value="rerank-english-v2.0">Cohere rerank-english-v2.0</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>LLM Model</label>
+        <select id="settingLLM">
+          <option value="gpt-4o-mini" selected>GPT-4o-mini</option>
+          <option value="gpt-4o">GPT-4o</option>
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Embedding Model</label>
+        <select id="settingEmbed">
+          <option value="text-embedding-3-small" selected>text-embedding-3-small (1536-d)</option>
+          <option value="text-embedding-3-large">text-embedding-3-large (3072-d)</option>
+          <option value="text-embedding-ada-002">text-embedding-ada-002 (1536-d)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Chunking Strategy</label>
+        <select id="settingChunking">
+          <option value="semantic" selected>Semantic Percentile (p95)</option>
+          <option value="fixed">Fixed-size (512 tokens)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+const API = '';  // same-origin
+
+// ── Tab switching ──────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
+  });
+});
+
+// ── Slider value sync ─────────────────────────────────────────────
+document.getElementById('topK').oninput = e => document.getElementById('topKVal').textContent = e.target.value;
+document.getElementById('rerankN').oninput = e => document.getElementById('rerankNVal').textContent = e.target.value;
+document.getElementById('evalSamples').oninput = e => document.getElementById('evalSamplesVal').textContent = e.target.value;
+
+// ── Toggle switch ─────────────────────────────────────────────────
+function toggleSwitch(el) { el.classList.toggle('active'); }
+
+// ── Stats check on load ───────────────────────────────────────────
+async function checkStats() {
+  try {
+    const res = await fetch(API + '/stats');
+    if (!res.ok) throw new Error('stats failed');
+    const data = await res.json();
+    document.getElementById('statChunks').textContent = data.total_chunks;
+    document.getElementById('statDocs').textContent = data.documents;
+    document.getElementById('statusDot').style.background = 'var(--green)';
+    document.getElementById('statusText').textContent = `Connected · ${data.total_chunks} chunks`;
+  } catch {
+    document.getElementById('statusDot').style.background = 'var(--red)';
+    document.getElementById('statusText').textContent = 'Backend offline';
+  }
+}
+checkStats();
+
+// ── POST /query ───────────────────────────────────────────────────
+async function runQuery() {
+  const question = document.getElementById('queryInput').value.trim();
+  if (!question) return;
+
+  const btn = document.getElementById('queryBtn');
+  btn.disabled = true;
+  document.getElementById('queryLoading').classList.add('show');
+  document.getElementById('answerCard').style.display = 'none';
+  document.getElementById('chunksCard').style.display = 'none';
+  document.getElementById('traceCard').style.display = 'none';
+
+  try {
+    const res = await fetch(API + '/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        mode: document.getElementById('queryMode').value,
+        top_k: parseInt(document.getElementById('topK').value),
+        rerank_n: parseInt(document.getElementById('rerankN').value),
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Query failed');
+    }
+    const data = await res.json();
+
+    // Answer
+    document.getElementById('answerBox').innerHTML = formatAnswer(data.answer);
+    document.getElementById('answerLatency').textContent = data.latency_ms;
+    document.getElementById('answerCard').style.display = '';
+
+    // Pipeline trace
+    const traceHtml = data.steps.map(s => `
+      <div class="trace-step">
+        <div class="trace-dot"></div>
+        <span class="trace-name">${s.name.replace(/_/g, ' ')}</span>
+        <span class="trace-ms">${s.latency_ms} ms</span>
+      </div>
+    `).join('');
+    document.getElementById('pipelineTrace').innerHTML = traceHtml;
+    document.getElementById('traceCard').style.display = '';
+
+    // Chunks
+    const chunksHtml = data.source_nodes.map(n => `
+      <div class="chunk-card">
+        <div class="chunk-header">
+          <span class="chunk-rank">#${n.rank}</span>
+          <div class="chunk-meta">
+            <span>Score: ${n.score ?? '—'}</span>
+            <span>${n.token_count} tokens</span>
+            <span>📄 ${n.source}</span>
+          </div>
+        </div>
+        <div class="score-bar-track">
+          <div class="score-bar-fill" style="width:${(n.score || 0) * 100}%"></div>
+        </div>
+        <div class="chunk-text">${escapeHtml(n.text)}</div>
+      </div>
+    `).join('');
+    document.getElementById('chunksList').innerHTML = chunksHtml;
+    document.getElementById('chunksCard').style.display = '';
+
+  } catch (err) {
+    document.getElementById('answerBox').innerHTML = `<span style="color:var(--red);">Error: ${escapeHtml(err.message)}</span>`;
+    document.getElementById('answerCard').style.display = '';
+  } finally {
+    btn.disabled = false;
+    document.getElementById('queryLoading').classList.remove('show');
+  }
+}
+
+function formatAnswer(text) {
+  // Convert [1][2] style citations to styled spans
+  return escapeHtml(text).replace(/\[(\d+)\]/g, '<span style="color:var(--accent);font-weight:600;cursor:pointer;">[$ 1]</span>');
+}
+function escapeHtml(t) {
+  const d = document.createElement('div');
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+// ── File upload (drag & drop) ─────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) uploadFiles(e.target.files); });
+
+async function uploadFiles(files) {
+  document.getElementById('ingestLoading').classList.add('show');
+  const formData = new FormData();
+  for (const f of files) formData.append('files', f);
+
+  try {
+    const res = await fetch(API + '/ingest', { method: 'POST', body: formData });
+    if (!res.ok) throw new Error('Ingest failed');
+    const data = await res.json();
+    document.getElementById('ingestResult').innerHTML =
+      `<span style="color:var(--green);">✓ ${data.documents_loaded} docs → ${data.chunks_created} chunks</span>`;
+    checkStats();
+  } catch (err) {
+    document.getElementById('ingestResult').innerHTML =
+      `<span style="color:var(--red);">Error: ${err.message}</span>`;
+  } finally {
+    document.getElementById('ingestLoading').classList.remove('show');
+  }
+}
+
+// ── Re-index ──────────────────────────────────────────────────────
+async function reindexAll() {
+  document.getElementById('actionResult').textContent = 'Re-indexing…';
+  try {
+    // We call ingest with no files — the backend re-processes /data
+    const res = await fetch(API + '/ingest', { method: 'POST', body: new FormData() });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Re-index failed');
+    }
+    const data = await res.json();
+    document.getElementById('actionResult').innerHTML =
+      `<span style="color:var(--green);">✓ Re-indexed: ${data.chunks_created} chunks</span>`;
+    checkStats();
+  } catch (err) {
+    document.getElementById('actionResult').innerHTML =
+      `<span style="color:var(--red);">Error: ${err.message}</span>`;
+  }
+}
+
+// ── Generate test set ─────────────────────────────────────────────
+async function generateTestset() {
+  document.getElementById('actionResult').textContent = 'Generating golden dataset…';
+  try {
+    const res = await fetch(API + '/generate-testset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ n_samples: 50 }),
+    });
+    if (!res.ok) throw new Error('Testset generation failed');
+    const data = await res.json();
+    document.getElementById('actionResult').innerHTML =
+      `<span style="color:var(--green);">✓ Generated ${data.samples_generated} QA pairs</span>`;
+  } catch (err) {
+    document.getElementById('actionResult').innerHTML =
+      `<span style="color:var(--red);">Error: ${err.message}</span>`;
+  }
+}
+
+// ── POST /evaluate ────────────────────────────────────────────────
+async function runEvaluation() {
+  const btn = document.getElementById('evalBtn');
+  btn.disabled = true;
+  document.getElementById('evalLoading').classList.add('show');
+
+  const log = document.getElementById('evalLog');
+  log.innerHTML = '<div class="log-line-info">[INFO] Starting RAGAS evaluation harness…</div>';
+  const addLog = (cls, msg) => {
+    log.innerHTML += `<div class="log-line-${cls}">[${cls.toUpperCase()}] ${msg}</div>`;
+    log.scrollTop = log.scrollHeight;
+  };
+
+  addLog('info', `Samples: ${document.getElementById('evalSamples').value}`);
+
+  try {
+    const res = await fetch(API + '/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ n_samples: parseInt(document.getElementById('evalSamples').value) }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Evaluation failed');
+    }
+    const data = await res.json();
+    addLog('success', 'Evaluation complete!');
+
+    // Update metric cards
+    const cp  = data.optimized.context_precision ?? '—';
+    const f   = data.optimized.faithfulness ?? '—';
+    const ar  = data.optimized.answer_relevancy ?? '—';
+    document.getElementById('evalCP').textContent    = typeof cp === 'number' ? cp.toFixed(4) : cp;
+    document.getElementById('evalFaith').textContent = typeof f  === 'number' ? f.toFixed(4)  : f;
+    document.getElementById('evalAR').textContent    = typeof ar === 'number' ? ar.toFixed(4) : ar;
+
+    // Deltas
+    renderDelta('evalCPDelta', data.delta.context_precision);
+    renderDelta('evalFaithDelta', data.delta.faithfulness);
+    renderDelta('evalARDelta', data.delta.answer_relevancy);
+
+    // Comparison table
+    const metrics = ['context_precision', 'faithfulness', 'answer_relevancy'];
+    let rows = metrics.map(m => {
+      const n = data.naive[m] ?? '—';
+      const o = data.optimized[m] ?? '—';
+      const d = data.delta[m] ?? '—';
+      const cls = typeof d === 'number' && d > 0 ? 'positive' : typeof d === 'number' && d < 0 ? 'negative' : '';
+      return `<tr>
+        <td>${m.replace(/_/g, ' ')}</td>
+        <td>${typeof n === 'number' ? n.toFixed(4) : n}</td>
+        <td>${typeof o === 'number' ? o.toFixed(4) : o}</td>
+        <td class="metric-delta ${cls}">${typeof d === 'number' ? (d >= 0 ? '+' : '') + d.toFixed(4) : d}</td>
+      </tr>`;
+    }).join('');
+    document.querySelector('#evalTable tbody').innerHTML = rows;
+
+    addLog('info', JSON.stringify(data, null, 2));
+
+  } catch (err) {
+    addLog('error', err.message);
+  } finally {
+    btn.disabled = false;
+    document.getElementById('evalLoading').classList.remove('show');
+  }
+}
+
+function renderDelta(id, val) {
+  const el = document.getElementById(id);
+  if (typeof val !== 'number') { el.textContent = ''; return; }
+  el.textContent = (val >= 0 ? '▲ +' : '▼ ') + val.toFixed(4);
+  el.className = 'metric-delta ' + (val >= 0 ? 'positive' : 'negative');
+}
+</script>
+
+</body>
+</html>
